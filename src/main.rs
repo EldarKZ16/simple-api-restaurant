@@ -23,6 +23,6 @@ fn main() {
         handle.join().unwrap();
     }
 
-    let orders = in_memory_repo.show_by_table_number(table_number);
+    let orders = in_memory_repo.get_by_table_number(table_number);
     println!("Orders for table {}: {:?}", table_number, orders);
 }

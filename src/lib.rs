@@ -1,4 +1,6 @@
 use std::collections::HashMap;
+use std::error;
+use std::fmt::Display;
 use std::sync::{Arc, Mutex};
 use chrono::{DateTime, Utc};
 use rand::Rng;
@@ -26,11 +28,30 @@ impl Order {
     }
 }
 
+#[derive(Debug)]
+pub enum OrderError {
+    NotFound,
+    LockFailed(String),
+    DatabaseError(String),
+}
+
+impl Display for OrderError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+       match *self {
+           OrderError::NotFound => write!(f, "Not found"),
+           OrderError::LockFailed(ref msg) => write!(f, "Lock failed, reason: {}", msg),
+           OrderError::DatabaseError(ref msg) => write!(f, "Database error, reason: {}", msg),
+       }
+    }
+}
+
+impl error::Error for OrderError {}
+
 pub trait OrderRepository {
-    fn add(&self, table_number: i32, item: String, quantity: u8);
-    fn remove(&self, table_number: i32, order_id: usize);
-    fn show_by_table_number(&self, table_number: i32) -> Vec<Order> ;
-    fn show(&self, order_id: usize) -> Option<Order>;
+    fn add(&self, table_number: i32, item: String, quantity: u8) -> Result<(), OrderError>;
+    fn remove(&self, table_number: i32, order_id: usize) -> Result<(), OrderError>;
+    fn get_by_table_number(&self, table_number: i32) -> Result<Vec<Order>, OrderError>;
+    fn get(&self, order_id: usize) -> Result<Order, OrderError>;
 }
 
 pub struct InMemoryOrderRepository {
@@ -46,47 +67,54 @@ impl InMemoryOrderRepository {
         }
     }
 
-    fn generate_order_id(&self) -> usize {
-        let mut id = self.order_id_counter.lock().unwrap();
+    fn generate_order_id(&self) -> Result<usize, OrderError> {
+        let mut id = self.order_id_counter.lock()
+            .map_err(|e| OrderError::LockFailed(e.to_string()))?;
         *id += 1;
-        *id
+        Ok(*id)
     }
 }
 
 impl OrderRepository for InMemoryOrderRepository {
-    fn add(&self, table_number: i32, item: String, quantity: u8) {
-        let id = self.generate_order_id();
+    fn add(&self, table_number: i32, item: String, quantity: u8) -> Result<(), OrderError> {
+        let id = self.generate_order_id()?;
         let created_at = Utc::now();
         let cooking_time = rand::thread_rng().gen_range(5..=15);
         let finished_at = created_at + chrono::Duration::minutes(cooking_time as i64);
         let order = Order::new(id, table_number, item, quantity, created_at, finished_at);
 
-        let mut orders = self.orders.lock().unwrap();
+        let mut orders = self.orders.lock()
+            .map_err(|e| OrderError::LockFailed(e.to_string()))?;
         orders.entry(table_number).or_insert_with(Vec::new).push(order);
+        Ok(())
     }
 
-    fn remove(&self, table_number: i32, order_id: usize) {
-        let mut orders = self.orders.lock().unwrap();
+    fn remove(&self, table_number: i32, order_id: usize) -> Result<(), OrderError> {
+        let mut orders = self.orders.lock()
+            .map_err(|e| OrderError::LockFailed(e.to_string()))?;
         if let Some(orders_for_table) = orders.get_mut(&table_number) {
             orders_for_table.retain(|order| order.id != order_id);
         }
+        Ok(())
     }
 
-    fn show_by_table_number(&self, table_number: i32) -> Vec<Order>  {
-        let orders = self.orders.lock().unwrap();
+    fn get_by_table_number(&self, table_number: i32) -> Result<Vec<Order>, OrderError> {
+        let orders = self.orders.lock()
+            .map_err(|e| OrderError::LockFailed(e.to_string()))?;
         match orders.get(&table_number) {
-            Some(orders_for_table) => orders_for_table.clone(),
-            None => Vec::new(),
+            Some(orders_for_table) => Ok(orders_for_table.clone()),
+            None => Ok(Vec::new()),
         }
     }
 
-    fn show(&self, order_id: usize) -> Option<Order> {
-        let orders = self.orders.lock().unwrap();
+    fn get(&self, order_id: usize) -> Result<Order, OrderError> {
+        let orders = self.orders.lock()
+            .map_err(|e| OrderError::LockFailed(e.to_string()))?;
         for (_, orders_for_table) in orders.iter() {
             if let Some(order) = orders_for_table.iter().find(|&order| order.id == order_id) {
-                return Some(order.clone());
+                return Ok(order.clone());
             }
         }
-        None
+        Err(OrderError::NotFound)
     }
 }
