@@ -9,18 +9,18 @@ use rand::Rng;
 pub struct Order {
     id: usize,
     table_number: i32,
-    item: String,
+    menu_item: String,
     quantity: u8,
     created_at: DateTime<Utc>,
     finished_at: DateTime<Utc>
 }
 
 impl Order {
-    pub fn new(id: usize, table_number: i32, item: String, quantity: u8, created_at: DateTime<Utc>, finished_at: DateTime<Utc>) -> Self {
+    pub fn new(id: usize, table_number: i32, menu_item: String, quantity: u8, created_at: DateTime<Utc>, finished_at: DateTime<Utc>) -> Self {
         Self {
             id,
             table_number,
-            item,
+            menu_item,
             quantity,
             created_at,
             finished_at,
@@ -33,6 +33,7 @@ pub enum OrderError {
     NotFound,
     LockFailed(String),
     DatabaseError(String),
+    ValidationFailed(String)
 }
 
 impl Display for OrderError {
@@ -41,14 +42,15 @@ impl Display for OrderError {
            OrderError::NotFound => write!(f, "Not found"),
            OrderError::LockFailed(ref msg) => write!(f, "Lock failed, reason: {}", msg),
            OrderError::DatabaseError(ref msg) => write!(f, "Database error, reason: {}", msg),
+           OrderError::ValidationFailed(ref msg) => write!(f, "Validation failed, reason: {}", msg),
        }
     }
 }
 
 impl error::Error for OrderError {}
 
-pub trait OrderRepository {
-    fn add(&self, table_number: i32, item: String, quantity: u8) -> Result<(), OrderError>;
+pub trait OrderRepository: Send + Sync {
+    fn add(&self, table_number: i32, menu_item: String, quantity: u8) -> Result<(), OrderError>;
     fn remove(&self, table_number: i32, order_id: usize) -> Result<(), OrderError>;
     fn get_by_table_number(&self, table_number: i32) -> Result<Vec<Order>, OrderError>;
     fn get(&self, order_id: usize) -> Result<Order, OrderError>;
@@ -76,12 +78,12 @@ impl InMemoryOrderRepository {
 }
 
 impl OrderRepository for InMemoryOrderRepository {
-    fn add(&self, table_number: i32, item: String, quantity: u8) -> Result<(), OrderError> {
+    fn add(&self, table_number: i32, menu_item: String, quantity: u8) -> Result<(), OrderError> {
         let id = self.generate_order_id()?;
         let created_at = Utc::now();
         let cooking_time = rand::thread_rng().gen_range(5..=15);
         let finished_at = created_at + chrono::Duration::minutes(cooking_time as i64);
-        let order = Order::new(id, table_number, item, quantity, created_at, finished_at);
+        let order = Order::new(id, table_number, menu_item, quantity, created_at, finished_at);
 
         let mut orders = self.orders.lock()
             .map_err(|e| OrderError::LockFailed(e.to_string()))?;
@@ -116,5 +118,65 @@ impl OrderRepository for InMemoryOrderRepository {
             }
         }
         Err(OrderError::NotFound)
+    }
+}
+
+#[derive(Debug)]
+pub struct OrderView {
+    id: usize,
+    table_number: i32,
+    menu_item: String,
+    quantity: u8,
+    time_to_cook: i64
+}
+
+impl OrderView {
+    pub fn from_order(order: &Order) -> Self {
+        let now = Utc::now();
+        let time_to_cook = (order.finished_at - now).num_minutes().max(0);
+        Self {
+            id: order.id,
+            table_number: order.table_number,
+            menu_item: order.menu_item.clone(),
+            quantity: order.quantity,
+            time_to_cook,
+        }
+    }
+}
+
+pub struct OrderService {
+    repository: Arc<dyn OrderRepository>,
+}
+
+impl OrderService {
+    pub fn new(repository: Arc<dyn OrderRepository>) -> Self {
+        Self { repository }
+    }
+
+    pub fn add_order(&self, table_number: i32, menu_item: String, quantity: u8) -> Result<(), OrderError> {
+        if table_number <= 0 {
+            return Err(OrderError::ValidationFailed("Invalid table number".to_string()));
+        }
+        if menu_item.trim().is_empty() {
+            return Err(OrderError::ValidationFailed("Menu item cannot be empty".to_string()));
+        }
+        if quantity == 0 {
+            return Err(OrderError::ValidationFailed("Quantity must be greater than 0".to_string()));
+        }
+        self.repository.add(table_number, menu_item, quantity)
+    }
+
+    pub fn remove_order(&self, table_number: i32, order_id: usize) -> Result<(), OrderError> {
+        self.repository.remove(table_number, order_id)
+    }
+
+    pub fn get_orders_by_table_number(&self, table_number: i32) -> Result<Vec<OrderView>, OrderError> {
+        let orders = self.repository.get_by_table_number(table_number)?;
+        Ok(orders.into_iter().map(|order| OrderView::from_order(&order)).collect())
+    }
+
+    pub fn get_order(&self, order_id: usize) -> Result<OrderView, OrderError> {
+        let order = self.repository.get(order_id)?;
+        Ok(OrderView::from_order(&order))
     }
 }
