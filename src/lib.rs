@@ -16,7 +16,7 @@ pub struct Order {
 }
 
 impl Order {
-    pub fn new(id: usize, table_number: i32, menu_item: String, quantity: u8, created_at: DateTime<Utc>, finished_at: DateTime<Utc>) -> Self {
+    fn new(id: usize, table_number: i32, menu_item: String, quantity: u8, created_at: DateTime<Utc>, finished_at: DateTime<Utc>) -> Self {
         Self {
             id,
             table_number,
@@ -52,7 +52,7 @@ impl error::Error for OrderError {}
 pub trait OrderRepository: Send + Sync {
     fn add(&self, table_number: i32, menu_item: String, quantity: u8) -> Result<(), OrderError>;
     fn remove(&self, table_number: i32, order_id: usize) -> Result<(), OrderError>;
-    fn get_by_table_number(&self, table_number: i32) -> Result<Vec<Order>, OrderError>;
+    fn get_remaining_by_table_number(&self, table_number: i32) -> Result<Vec<Order>, OrderError>;
     fn get(&self, order_id: usize) -> Result<Order, OrderError>;
 }
 
@@ -100,13 +100,15 @@ impl OrderRepository for InMemoryOrderRepository {
         Ok(())
     }
 
-    fn get_by_table_number(&self, table_number: i32) -> Result<Vec<Order>, OrderError> {
+    fn get_remaining_by_table_number(&self, table_number: i32) -> Result<Vec<Order>, OrderError> {
         let orders = self.orders.lock()
             .map_err(|e| OrderError::LockFailed(e.to_string()))?;
-        match orders.get(&table_number) {
-            Some(orders_for_table) => Ok(orders_for_table.clone()),
-            None => Ok(Vec::new()),
-        }
+        Ok(orders.get(&table_number)
+            .cloned()
+            .unwrap_or_else(|| Vec::new())
+            .into_iter()
+            .filter(|order| order.finished_at > Utc::now())
+            .collect())
     }
 
     fn get(&self, order_id: usize) -> Result<Order, OrderError> {
@@ -170,8 +172,8 @@ impl OrderService {
         self.repository.remove(table_number, order_id)
     }
 
-    pub fn get_orders_by_table_number(&self, table_number: i32) -> Result<Vec<OrderView>, OrderError> {
-        let orders = self.repository.get_by_table_number(table_number)?;
+    pub fn get_remaining_orders_by_table_number(&self, table_number: i32) -> Result<Vec<OrderView>, OrderError> {
+        let orders = self.repository.get_remaining_by_table_number(table_number)?;
         Ok(orders.into_iter().map(|order| OrderView::from_order(&order)).collect())
     }
 

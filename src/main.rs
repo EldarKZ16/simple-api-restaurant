@@ -27,7 +27,7 @@ fn main() {
         handle.join().unwrap();
     }
 
-    let orders = order_service.get_orders_by_table_number(table_number);
+    let orders = order_service.get_remaining_orders_by_table_number(table_number);
     println!("Orders for table {}: {:#?}", table_number, orders);
     assert_eq!(orders.unwrap().len(), 10);
 }
