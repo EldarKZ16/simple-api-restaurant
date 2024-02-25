@@ -114,10 +114,12 @@ impl OrderRepository for InMemoryOrderRepository {
     fn get(&self, order_id: usize) -> Result<Order, OrderError> {
         let orders = self.orders.lock()
             .map_err(|e| OrderError::LockFailed(e.to_string()))?;
-        for (_, orders_for_table) in orders.iter() {
-            if let Some(order) = orders_for_table.iter().find(|&order| order.id == order_id) {
-                return Ok(order.clone());
-            }
+        let order = orders.iter()
+            .map(|(_, order)| order)
+            .flatten()
+            .find(|&order| order.id == order_id);
+        if let Some(order) = order {
+            return Ok(order.clone());
         }
         Err(OrderError::NotFound)
     }
