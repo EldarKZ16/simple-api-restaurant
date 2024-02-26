@@ -4,6 +4,8 @@ use std::fmt::Display;
 use std::sync::{Arc, Mutex};
 use chrono::{DateTime, Utc};
 use rand::Rng;
+use serde::{Deserialize, Serialize};
+use warp::reject::Reject;
 
 #[derive(Debug, Clone)]
 pub struct Order {
@@ -33,7 +35,8 @@ pub enum OrderError {
     NotFound,
     LockFailed(String),
     DatabaseError(String),
-    ValidationFailed(String)
+    ValidationFailed(String),
+    ParseFailed(String)
 }
 
 impl Display for OrderError {
@@ -43,6 +46,7 @@ impl Display for OrderError {
            OrderError::LockFailed(ref msg) => write!(f, "Lock failed, reason: {}", msg),
            OrderError::DatabaseError(ref msg) => write!(f, "Database error, reason: {}", msg),
            OrderError::ValidationFailed(ref msg) => write!(f, "Validation failed, reason: {}", msg),
+           OrderError::ParseFailed(ref msg) => write!(f, "Parsing failed, reason: {}", msg),
        }
     }
 }
@@ -51,7 +55,7 @@ impl error::Error for OrderError {}
 
 pub trait OrderRepository: Send + Sync {
     fn add(&self, table_number: i32, menu_item: String, quantity: u8) -> Result<(), OrderError>;
-    fn remove(&self, table_number: i32, order_id: usize) -> Result<(), OrderError>;
+    fn remove(&self, order_id: usize) -> Result<(), OrderError>;
     fn get_remaining_by_table_number(&self, table_number: i32) -> Result<Vec<Order>, OrderError>;
     fn get(&self, order_id: usize) -> Result<Order, OrderError>;
 }
@@ -91,10 +95,11 @@ impl OrderRepository for InMemoryOrderRepository {
         Ok(())
     }
 
-    fn remove(&self, table_number: i32, order_id: usize) -> Result<(), OrderError> {
+    // fixme
+    fn remove(&self, order_id: usize) -> Result<(), OrderError> {
         let mut orders = self.orders.lock()
             .map_err(|e| OrderError::LockFailed(e.to_string()))?;
-        if let Some(orders_for_table) = orders.get_mut(&table_number) {
+        if let Some(orders_for_table) = orders.get_mut(&1) {
             orders_for_table.retain(|order| order.id != order_id);
         }
         Ok(())
@@ -125,7 +130,7 @@ impl OrderRepository for InMemoryOrderRepository {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 pub struct OrderView {
     id: usize,
     table_number: i32,
@@ -170,8 +175,8 @@ impl OrderService {
         self.repository.add(table_number, menu_item, quantity)
     }
 
-    pub fn remove_order(&self, table_number: i32, order_id: usize) -> Result<(), OrderError> {
-        self.repository.remove(table_number, order_id)
+    pub fn remove_order(&self, order_id: usize) -> Result<(), OrderError> {
+        self.repository.remove(order_id)
     }
 
     pub fn get_remaining_orders_by_table_number(&self, table_number: i32) -> Result<Vec<OrderView>, OrderError> {
@@ -182,5 +187,25 @@ impl OrderService {
     pub fn get_order(&self, order_id: usize) -> Result<OrderView, OrderError> {
         let order = self.repository.get(order_id)?;
         Ok(OrderView::from_order(&order))
+    }
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct AddOrderRequest {
+    pub table_number: i32,
+    pub menu_item: String,
+    pub quantity: u8
+}
+
+#[derive(Debug)]
+pub struct OrderErrorRejection {
+    pub err: OrderError,
+}
+
+impl Reject for OrderErrorRejection {}
+
+impl OrderError {
+    pub fn reject(self) -> warp::Rejection {
+        warp::reject::custom(OrderErrorRejection { err: self })
     }
 }
