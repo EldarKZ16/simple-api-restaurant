@@ -58,7 +58,7 @@ async fn add_order_handler(
 ) -> Result<impl warp::Reply, warp::Rejection> {
     order_service.add_order(new_order.table_number, new_order.menu_item, new_order.quantity)
         .map(|_| StatusCode::OK)
-        .map_err(|e| e.reject())
+        .map_err(|err| err.reject())
 }
 
 async fn get_order_handler(
@@ -67,7 +67,7 @@ async fn get_order_handler(
 ) -> Result<Box<dyn warp::Reply>, warp::Rejection> {
     match order_service.get_order(order_id) {
         Ok(order_view) => Ok(Box::new(warp::reply::json(&order_view))),
-        Err(_) => Ok(Box::new(StatusCode::NOT_FOUND)),
+        Err(err) => Err(err.reject()),
     }
 }
 
@@ -78,7 +78,7 @@ async fn get_orders_by_table_number_handler(
     if let Some(table_number) = params.get("table_number") {
         match order_service.get_remaining_orders_by_table_number(*table_number) {
             Ok(orders) => Ok(warp::reply::json(&orders)),
-            Err(_) => Err(warp::reject::not_found()),
+            Err(err) => Err(err.reject()),
         }
     } else {
         Err(warp::reject::not_found())
@@ -91,13 +91,13 @@ async fn remove_order_handler(
 ) -> Result<impl warp::Reply, warp::Rejection> {
     order_service.remove_order(order_id)
         .map(|_| StatusCode::OK)
-        .map_err(|e| e.reject())
+        .map_err(|err| err.reject())
 }
 
 async fn handle_rejection(err: Rejection) -> Result<impl Reply, Rejection> {
     if let Some(OrderErrorRejection { err }) = err.find() {
         let (code, message) = match err {
-            OrderError::NotFound => (StatusCode::NOT_FOUND, "Order not found"),
+            OrderError::NotFound => (StatusCode::NOT_FOUND, "NOT_FOUND"),
             OrderError::LockFailed(msg) => (StatusCode::INTERNAL_SERVER_ERROR, msg.as_str()),
             OrderError::DatabaseError(msg) => (StatusCode::INTERNAL_SERVER_ERROR, msg.as_str()),
             OrderError::ValidationFailed(msg) => (StatusCode::BAD_REQUEST, msg.as_str()),

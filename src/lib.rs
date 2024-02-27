@@ -42,7 +42,7 @@ pub enum OrderError {
 impl Display for OrderError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
        match *self {
-           OrderError::NotFound => write!(f, "Not found"),
+           OrderError::NotFound => write!(f, "NOT_FOUND"),
            OrderError::LockFailed(ref msg) => write!(f, "Lock failed, reason: {}", msg),
            OrderError::DatabaseError(ref msg) => write!(f, "Database error, reason: {}", msg),
            OrderError::ValidationFailed(ref msg) => write!(f, "Validation failed, reason: {}", msg),
