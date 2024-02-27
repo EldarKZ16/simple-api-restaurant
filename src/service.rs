@@ -52,3 +52,83 @@ impl OrderService {
         Ok(OrderView::from_order(&order))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{
+        model::view::OrderView,
+        repository::InMemoryRepository
+    };
+    use std::sync::Arc;
+
+    fn create_order_service() -> OrderService {
+        let in_memory_repo = Arc::new(InMemoryRepository::new());
+        OrderService::new(in_memory_repo)
+    }
+
+    #[test]
+    fn add_and_get_order_success() {
+        let order_service = create_order_service();
+        let result = order_service.add_order(1, "Ramen".to_string(), 2);
+        assert!(result.is_ok());
+
+        let order_view: OrderView = order_service.get_order(1).unwrap();
+        assert_eq!(order_view.menu_item, "Ramen");
+        assert_eq!(order_view.quantity, 2);
+    }
+
+    #[test]
+    fn add_orders_and_get_order_success() {
+        let order_service = create_order_service();
+        order_service.add_order(3, "Ramen".to_string(), 2).unwrap();
+        order_service.add_order(2, "Udon".to_string(), 3).unwrap();
+        order_service.add_order(1, "Soba".to_string(), 4).unwrap();
+
+        let order_view: OrderView = order_service.get_order(3).unwrap();
+        assert_eq!(order_view.table_number, 1);
+        assert_eq!(order_view.menu_item, "Soba");
+        assert_eq!(order_view.quantity, 4);
+    }
+
+    #[test]
+    fn add_order_validation_failure() {
+        let order_service = create_order_service();
+        assert!(order_service.add_order(0, "Sushi".to_string(), 2).is_err());
+        assert!(order_service.add_order(1, "".to_string(), 2).is_err());
+        assert!(order_service.add_order(1, "Sushi".to_string(), 0).is_err());
+    }
+
+    #[test]
+    fn remove_order_success() {
+        let order_service = create_order_service();
+        let add_result = order_service.add_order(1, "Ramen".to_string(), 1);
+        assert!(add_result.is_ok());
+
+        let remove_result = order_service.remove_order(1);
+        assert!(remove_result.is_ok());
+
+        assert!(order_service.get_order(1).is_err())
+    }
+
+    #[test]
+    fn get_remaining_orders_by_table_number() {
+        let order_service = create_order_service();
+        order_service.add_order(1, "Sushi".to_string(), 2).unwrap();
+        order_service.add_order(1, "Ramen".to_string(), 1).unwrap();
+        order_service.add_order(1, "Udon".to_string(), 4).unwrap();
+        order_service.add_order(2, "Soba".to_string(), 3).unwrap();
+
+        let orders = order_service.get_remaining_orders_by_table_number(1).unwrap();
+        assert_eq!(orders.len(), 3);
+    }
+
+    #[test]
+    fn get_remaining_orders_by_table_number_empty() {
+        let order_service = create_order_service();
+        order_service.add_order(1, "Sushi".to_string(), 2).unwrap();
+
+        let orders = order_service.get_remaining_orders_by_table_number(2).unwrap();
+        assert_eq!(orders.len(), 0);
+    }
+}

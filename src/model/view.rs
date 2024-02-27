@@ -5,9 +5,9 @@ use crate::model::domain::Order;
 #[derive(Serialize)]
 pub struct OrderView {
     id: usize,
-    table_number: i32,
-    menu_item: String,
-    quantity: u8,
+    pub table_number: i32,
+    pub menu_item: String,
+    pub quantity: u8,
     time_to_cook: i64
 }
 
