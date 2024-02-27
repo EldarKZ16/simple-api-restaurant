@@ -3,33 +3,33 @@ use std::error::Error;
 use warp::reject::Reject;
 
 #[derive(Debug)]
-pub enum OrderError {
+pub enum GeneralError {
     NotFound,
     LockFailed(String),
     ValidationFailed(String)
 }
 
-impl Display for OrderError {
+impl Display for GeneralError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
        match *self {
-           OrderError::NotFound => write!(f, "NOT_FOUND"),
-           OrderError::LockFailed(ref msg) => write!(f, "Lock failed, reason: {}", msg),
-           OrderError::ValidationFailed(ref msg) => write!(f, "Validation failed, reason: {}", msg)
+           GeneralError::NotFound => write!(f, "NOT_FOUND"),
+           GeneralError::LockFailed(ref msg) => write!(f, "Lock failed, reason: {}", msg),
+           GeneralError::ValidationFailed(ref msg) => write!(f, "Validation failed, reason: {}", msg)
        }
     }
 }
 
-impl Error for OrderError {}
+impl Error for GeneralError {}
 
 #[derive(Debug)]
-pub struct OrderErrorRejection {
-    pub err: OrderError,
+pub struct GeneralErrorRejection {
+    pub err: GeneralError,
 }
 
-impl Reject for OrderErrorRejection {}
+impl Reject for GeneralErrorRejection {}
 
-impl OrderError {
+impl GeneralError {
     pub fn reject(self) -> warp::Rejection {
-        warp::reject::custom(OrderErrorRejection { err: self })
+        warp::reject::custom(GeneralErrorRejection { err: self })
     }
 }

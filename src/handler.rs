@@ -1,6 +1,6 @@
 use std::{collections::HashMap, error::Error, sync::Arc};
 
-use crate::{model::{error::{OrderError, OrderErrorRejection}, http::AddOrderRequest}, service::OrderService};
+use crate::{model::{error::{GeneralError, GeneralErrorRejection}, http::AddOrderRequest}, service::OrderService};
 use warp::{http::StatusCode, reject::Rejection, reply::Reply};
 
 pub async fn add_order_handler(
@@ -46,11 +46,11 @@ pub async fn remove_order_handler(
 }
 
 pub async fn handle_rejection(err: Rejection) -> Result<impl Reply, Rejection> {
-    if let Some(OrderErrorRejection { err }) = err.find() {
+    if let Some(GeneralErrorRejection { err }) = err.find() {
         let (code, message) = match err {
-            OrderError::NotFound => (StatusCode::NOT_FOUND, "NOT_FOUND"),
-            OrderError::LockFailed(msg) => (StatusCode::INTERNAL_SERVER_ERROR, msg.as_str()),
-            OrderError::ValidationFailed(msg) => (StatusCode::BAD_REQUEST, msg.as_str()),
+            GeneralError::NotFound => (StatusCode::NOT_FOUND, "NOT_FOUND"),
+            GeneralError::LockFailed(msg) => (StatusCode::INTERNAL_SERVER_ERROR, msg.as_str()),
+            GeneralError::ValidationFailed(msg) => (StatusCode::BAD_REQUEST, msg.as_str()),
         };
 
         let json = warp::reply::json(&HashMap::from([("message", message)]));
