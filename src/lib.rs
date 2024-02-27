@@ -95,13 +95,12 @@ impl OrderRepository for InMemoryOrderRepository {
         Ok(())
     }
 
-    // fixme
     fn remove(&self, order_id: usize) -> Result<(), OrderError> {
         let mut orders = self.orders.lock()
             .map_err(|e| OrderError::LockFailed(e.to_string()))?;
-        if let Some(orders_for_table) = orders.get_mut(&1) {
-            orders_for_table.retain(|order| order.id != order_id);
-        }
+        orders.values_mut().for_each(|order| {
+            order.retain(|order| order.id != order_id);
+        });
         Ok(())
     }
 
