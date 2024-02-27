@@ -57,7 +57,7 @@ async fn add_order_handler(
     new_order: AddOrderRequest,
 ) -> Result<impl warp::Reply, warp::Rejection> {
     order_service.add_order(new_order.table_number, new_order.menu_item, new_order.quantity)
-        .map(|_| StatusCode::CREATED)
+        .map(|_| StatusCode::OK)
         .map_err(|e| e.reject())
 }
 
