@@ -4,13 +4,13 @@ mod repository;
 mod handler;
 
 use std::{collections::HashMap, sync::Arc};
-use repository::InMemoryOrderRepository;
+use repository::InMemoryRepository;
 use service::OrderService;
 use warp::{http::StatusCode, Filter}; 
 
 #[tokio::main]
 async fn main() {
-    let in_memory_repo = Arc::new(InMemoryOrderRepository::new());
+    let in_memory_repo = Arc::new(InMemoryRepository::new());
     let order_service = Arc::new(OrderService::new(in_memory_repo));
     let order_service_filter = warp::any().map(move || Arc::clone(&order_service));
 

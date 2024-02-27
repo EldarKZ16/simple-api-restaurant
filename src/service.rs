@@ -1,18 +1,19 @@
 use std::sync::Arc;
+use chrono::Utc;
+use rand::Rng;
 
 use crate::{
     model::{
-        error::OrderError, 
-        view::OrderView
+        domain::Order, error::OrderError, view::OrderView
     }, 
-    repository::OrderRepository
+    repository::Repository
 };
 pub struct OrderService {
-    repository: Arc<dyn OrderRepository>,
+    repository: Arc<dyn Repository<Order>>,
 }
 
 impl OrderService {
-    pub fn new(repository: Arc<dyn OrderRepository>) -> Self {
+    pub fn new(repository: Arc<dyn Repository<Order>>) -> Self {
         Self { repository }
     }
 
@@ -26,7 +27,11 @@ impl OrderService {
         if quantity == 0 {
             return Err(OrderError::ValidationFailed("Quantity must be greater than 0".to_string()));
         }
-        self.repository.add(table_number, menu_item, quantity)
+        let created_at = Utc::now();
+        let cooking_time = rand::thread_rng().gen_range(5..=15);
+        let finished_at = created_at + chrono::Duration::minutes(cooking_time as i64);
+        let order = Order::new(table_number, menu_item, quantity, created_at, finished_at);
+        self.repository.add(order)
     }
 
     pub fn remove_order(&self, order_id: usize) -> Result<(), OrderError> {
@@ -34,8 +39,12 @@ impl OrderService {
     }
 
     pub fn get_remaining_orders_by_table_number(&self, table_number: i32) -> Result<Vec<OrderView>, OrderError> {
-        let orders = self.repository.get_remaining_by_table_number(table_number)?;
-        Ok(orders.into_iter().map(|order| OrderView::from_order(&order)).collect())
+        let orders = self.repository.list()?;
+        let order_by_table_number = orders.into_iter()
+            .filter(|order| order.table_number == table_number)
+            .map(|order| OrderView::from_order(&order))
+            .collect();
+        Ok(order_by_table_number)
     }
 
     pub fn get_order(&self, order_id: usize) -> Result<OrderView, OrderError> {
