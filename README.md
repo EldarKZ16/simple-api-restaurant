@@ -86,3 +86,9 @@ I went with the Repository approach as it can be generic and extendable. It took
 - Implement PostgreSQLRepository that uses DB, create an index for the table_number. Refactor OrderService to use PostgreSQLRepository
 
 2. `InMemoryRepository` uses Mutex that blocks the entire thread. Possibly need to replace it with tokio Mutex that uses semantic blocking
+
+3. No support of Docker. Need to configure the Dockerfile and build an image that can be run in a container rather than directly calling cargo commands. Later, can be configured for running in Kubernetes
+
+4. No proper logs, only println. Need to enable the logs to improve traceability
+
+5. No code formatter. Need to add and configure one
